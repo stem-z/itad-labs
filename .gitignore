@@ -1,0 +1,15 @@
+.env
+dbt/profiles.yml
+.idea/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+# Временные файлы DuckDB не являются слоем данных проекта.
+*.duckdb
+*.duckdb.wal
+dbt/target/
+dbt/logs/
+*.log
+.DS_Store

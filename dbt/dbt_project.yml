@@ -1,0 +1,27 @@
+name: itad_labs
+version: "1.0.0"
+config-version: 2
+
+profile: itad_labs
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages", "logs"]
+
+# В :memory:-режиме dbt заново регистрирует внешние upstream-модели как views.
+on-run-start:
+  - "{{ register_upstream_external_models() }}"
+
+models:
+  itad_labs:
+    staging:
+      +tags: ["staging"]
+      +materialized: external
+      +format: parquet
+    marts:
+      +tags: ["mart"]
+      +materialized: external
+      +format: parquet

@@ -1,0 +1,16 @@
+itad_labs:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      # DuckDB - только вычислительный движок текущего запуска.
+      # Staging и mart материализуются как Parquet в MinIO.
+      path: ":memory:"
+      extensions:
+        - httpfs
+      settings:
+        s3_endpoint: "{{ env_var('MINIO_S3_ENDPOINT', 'localhost:9000') }}"
+        s3_url_style: path
+        s3_use_ssl: false
+        s3_access_key_id: "{{ env_var('MINIO_ROOT_USER') }}"
+        s3_secret_access_key: "{{ env_var('MINIO_ROOT_PASSWORD') }}"

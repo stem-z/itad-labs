@@ -1,0 +1,90 @@
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: airflow/Dockerfile
+  environment: &airflow-environment
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@airflow-db:5432/${POSTGRES_DB}
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY}
+    # Официальный entrypoint Airflow применяет миграции и создаёт администратора
+    # при запуске сервисов. Отдельный init-контейнер не требуется.
+    _AIRFLOW_DB_MIGRATE: "true"
+    _AIRFLOW_WWW_USER_CREATE: "true"
+    _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USERNAME}
+    _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+    _AIRFLOW_WWW_USER_FIRSTNAME: ITAD
+    _AIRFLOW_WWW_USER_LASTNAME: Admin
+    _AIRFLOW_WWW_USER_EMAIL: admin@example.local
+    _AIRFLOW_WWW_USER_ROLE: Admin
+    AIRFLOW_CONN_MINIO_S3_CONN: ${AIRFLOW_CONN_MINIO_S3_CONN}
+    AIRFLOW_CONN_SOURCE_HTTP_CONN: ${AIRFLOW_CONN_SOURCE_HTTP_CONN}
+    # Нужны будущим dbt-задачам, запускаемым внутри сети Compose.
+    MINIO_S3_ENDPOINT: minio:9000
+    MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+    MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    PROJECT_ROOT: /opt/airflow/project
+    PYTHONPATH: /opt/airflow/project/src
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./config:/opt/airflow/project/config:ro
+    - ./dbt:/opt/airflow/project/dbt:ro
+    - ./src:/opt/airflow/project/src:ro
+    - airflow-logs:/opt/airflow/logs
+  user: "${AIRFLOW_UID:-50000}:0"
+
+services:
+  minio:
+    # Актуальные официальные образы MinIO публикуются в Quay Registry.
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  airflow-db:
+    image: postgres:16.8-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  airflow-webserver:
+    <<: *airflow-common
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    command: webserver
+    ports:
+      - "8080:8080"
+
+  airflow-scheduler:
+    <<: *airflow-common
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    command: scheduler
+
+volumes:
+  airflow-db-data:
+  airflow-logs:
+  minio-data:
